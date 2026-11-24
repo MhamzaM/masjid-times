@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f6f3">
+  <title>Masjid Times</title>
+  <meta name="description" content="Jamaat times of the masjids around you, confirmed by the people who pray there. No ads.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <main id="view" class="view"></main>
+    <nav class="tabs" aria-label="Main">
+      <button data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-1.7 2-4 3.3-4 6v1H6v12h4v-5a2 2 0 0 1 4 0v5h4V9h-2V8c0-2.7-2.3-4-4-6z"/></svg><span data-t="tabHome"></span></button>
+      <button data-tab="nearby"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg><span data-t="tabNearby"></span></button>
+      <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4L10.6 6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg><span data-t="tabSettings"></span></button>
+    </nav>
+  </div>
+
+  <div class="sheet-back hidden" id="sheet" role="dialog" aria-modal="true">
+    <div class="sheet" id="sheetBody"></div>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="i18n.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
