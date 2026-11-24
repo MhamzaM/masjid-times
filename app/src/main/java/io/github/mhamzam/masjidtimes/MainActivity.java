@@ -66,6 +66,8 @@ public class MainActivity extends Activity {
         s.setSupportZoom(false);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
+        // OpenStreetMap asks apps that show its map tiles to identify themselves.
+        s.setUserAgentString(s.getUserAgentString() + " MasjidTimes/1.0 (+https://github.com/MhamzaM/masjid-times)");
 
         web.addJavascriptInterface(new Bridge(), "MasjidNative");
         web.setWebViewClient(new WebViewClient() {

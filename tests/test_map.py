@@ -1,0 +1,52 @@
+import json, io
+from playwright.sync_api import sync_playwright
+exec(open("test_ui.py").read().split("fails = []")[0])
+from PIL import Image, ImageDraw
+im = Image.new("RGB", (256, 256), (236, 233, 226)); d = ImageDraw.Draw(im)
+d.line([(0, 128), (256, 128)], fill=(255, 255, 255), width=10); d.line([(90, 0), (90, 256)], fill=(255, 255, 255), width=6)
+d.rectangle([150, 20, 230, 100], fill=(205, 230, 200)); buf = io.BytesIO(); im.save(buf, "PNG"); TILE = buf.getvalue()
+M3 = dict(M1, id="m3", name="Sunehri Masjid", lat=34.0105, lon=71.5745, status="active", distance=99999, timings=[], pending=[])
+def handle2(route, req):
+    if "/rpc/nearby_mosques" in req.url and json.loads(req.post_data).get("p_radius_m") != 3000:
+        calls.append(("map_area", json.loads(req.post_data), None))
+        return route.fulfill(json=[M1, M2, M3])
+    return handle(route, req)
+ok = True
+def check(n, c):
+    global ok; print(("PASS " if c else "FAIL ") + n); ok &= bool(c)
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, geolocation={"latitude": LAT, "longitude": LON}, permissions=["geolocation"], device_scale_factor=2)
+    pg = ctx.new_page(); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
+    pg.route("https://tile.openstreetmap.org/**", lambda r, q: r.fulfill(body=TILE, content_type="image/png"))
+    pg.route("https://fdrysyukstjeeudtfhld.supabase.co/**", handle2)
+    pg.goto(APP); pg.click("text=Find masjids near me"); pg.wait_for_selector(".m-item")
+    pg.click("[data-open=m1]"); pg.click("[data-mine=m1]")
+    pg.click("[data-tab=nearby]"); pg.click("[data-view=map]")
+    pg.wait_for_timeout(1200)
+    check("map shown", pg.locator(".map .leaflet-tile-loaded").count() > 0)
+    check("you dot", pg.locator(".you-dot").count() == 1)
+    check("area loaded", any(c[0] == "map_area" for c in calls))
+    check("3 pins", pg.locator(".leaflet-marker-icon.pin").count() == 3)
+    check("mine pin gold", pg.locator(".pin.mine").count() == 1 and pg.locator(".pin.new").count() == 1)
+    dist = pg.evaluate("window.__masjid.state.cache.m3.distance")
+    check("distance from person not map centre (%s m)" % dist, 380 < dist < 440)
+    check("osm attribution", "OpenStreetMap" in pg.inner_text(".leaflet-control-attribution"))
+    pg.click(".leaflet-control-zoom-out"); pg.wait_for_timeout(700)
+    pg.screenshot(path="shot_map.png")
+    pg.click(".leaflet-marker-icon[title='Sunehri Masjid']"); pg.wait_for_timeout(300)
+    check("popup", pg.locator(".pop").is_visible() and "Sunehri" in pg.inner_text(".pop"))
+    pg.screenshot(path="shot_map_popup.png")
+    pg.click(".pop [data-open]"); pg.wait_for_timeout(200)
+    check("opens detail", pg.locator(".board-name", has_text="Sunehri").is_visible())
+    pg.click("[data-back]"); pg.wait_for_timeout(500)
+    check("map survives re-render", pg.locator(".map .leaflet-marker-icon.pin").count() == 3)
+    pg.click("[data-tab=settings]"); pg.click("[data-lang=ur]"); pg.click("[data-tab=nearby]"); pg.wait_for_timeout(500)
+    check("urdu map toggle", pg.locator("[data-view=map][aria-pressed=true]", has_text="نقشہ").count() == 1 and pg.locator(".map").get_attribute("dir") == "ltr")
+    pg.screenshot(path="shot_map_ur.png")
+    pg.click("[data-view=list]"); check("back to list", pg.locator(".m-item").count() >= 2)
+    pg.reload(); pg.wait_for_timeout(300); pg.click("[data-tab=nearby]")
+    check("view remembered", pg.locator("[data-view=list][aria-pressed=true]").count() == 1)
+    check("no js errors", not errs); print(errs) if errs else None
+    b.close()
+print("ALL PASS" if ok else "SOME FAILED")

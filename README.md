@@ -3,7 +3,7 @@
 Jamaat times of the masjids around you, kept accurate by the people who pray there.
 Free, with no ads and no account. English, اردو, پښتو. Launching in Peshawar.
 
-- **Nearby masjids** by distance, with search. Pick *your masjid* and follow others.
+- **Nearby masjids** as a list or a map (your location plus every masjid around you), with search. Pick *your masjid* and follow others.
 - **Jamaat board:** the next jamaat with a countdown, and each time shown as *confirmed by N* or *unverified*. Maghrib can be set as "sunset + N minutes" so it follows the sun every day.
 - **Reminders** before each jamaat (per prayer, 5–30 minutes ahead). Jumuah replaces Dhuhr on Fridays.
 - **Change alerts** when a jamaat time changes at a masjid you follow.
@@ -41,5 +41,7 @@ The APK is about 200 KB plus fonts. Each push builds it with GitHub Actions; pus
 1. Create a Supabase project. In **Authentication → Sign In / Providers**, turn on **Allow anonymous sign-ins**.
 2. In the **SQL Editor**, run `supabase/schema.sql`.
 3. Put your project URL and **publishable** key in `app/src/main/assets/app/core.js`. Never put the secret or service-role key in the app.
+
+Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors · Maps by [Leaflet](https://leafletjs.com) (BSD-2-Clause)
 
 Privacy: [PRIVACY.md](PRIVACY.md) · Part of [FreeApps by Hamza](https://mhamzam.github.io)

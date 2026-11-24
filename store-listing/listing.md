@@ -11,7 +11,7 @@ Jamaat times of the masjids around you, kept up to date by the people who pray t
 
 Prayer-time apps calculate when a prayer *starts*. Masjid Times shows when the **jamaat** actually begins at each masjid, so you can catch it at the one nearest to you, whether you're at home, at work or travelling across town.
 
-• Nearby masjids sorted by distance, with search
+• Nearby masjids on a map or in a list sorted by distance, with search
 • A timing board for your masjid with the next jamaat and a countdown
 • Reminders 5–30 minutes before each jamaat, set per prayer
 • Jumuah time on Fridays

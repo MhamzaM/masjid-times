@@ -15,6 +15,7 @@
     follows: [],
     cache: {},            // id -> last masjid data from the server
     nearby: [],           // ids from the last nearby search
+    nearbyView: "list",   // list | map
     loc: null,            // last location { lat, lon, at }
     settings: { remind: true, before: 10, prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true, jumuah: true }, changes: true },
   });
@@ -109,7 +110,7 @@
     } catch (e) {
       throw e;
     }
-    S.loc = { lat: loc.lat, lon: loc.lon, at: Date.now() };
+    S.loc = { lat: loc.lat, lon: loc.lon, accuracy: loc.accuracy, at: Date.now() };
     const list = await C.rpc("nearby_mosques", { p_lat: loc.lat, p_lon: loc.lon, p_radius_m: 3000 });
     cacheMosques(list);
     S.nearby = list.map((m) => m.id);
@@ -212,6 +213,115 @@
     if (S.tab === "home") v.innerHTML = homeHTML();
     else if (S.tab === "nearby") v.innerHTML = detailId ? detailHTML(S.cache[detailId]) : nearbyHTML();
     else v.innerHTML = settingsHTML();
+    if ($("mapHost")) attachMap();
+  }
+
+  // ------------------------------------------------------------ map (Leaflet + OpenStreetMap tiles)
+
+  const PESHAWAR = [34.008, 71.53];
+  let map = null, mapEl = null, mosqueLayer = null, userLayer = null, mapTimer = 0, mapCentered = false;
+  const pins = {}; // id -> { marker, cls }
+
+  function distM(a, b) {
+    const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+    return 6371000 * 2 * Math.asin(Math.sqrt(h));
+  }
+
+  function ensureMap() {
+    if (map || !window.L) return !!map;
+    const Lf = window.L;
+    mapEl = document.createElement("div");
+    mapEl.className = "map";
+    mapEl.dir = "ltr";
+    map = Lf.map(mapEl, { zoomControl: false, minZoom: 5, maxZoom: 19 }).setView(S.loc ? [S.loc.lat, S.loc.lon] : PESHAWAR, S.loc ? 16 : 13);
+    Lf.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    Lf.control.zoom({ position: "bottomright" }).addTo(map);
+    map.attributionControl.setPrefix(false);
+    mosqueLayer = Lf.layerGroup().addTo(map);
+    userLayer = Lf.layerGroup().addTo(map);
+    map.on("moveend", () => { clearTimeout(mapTimer); mapTimer = setTimeout(loadMapArea, 450); });
+    return true;
+  }
+
+  function attachMap() {
+    if (!ensureMap()) return;
+    $("mapHost").appendChild(mapEl);
+    map.invalidateSize(false);
+    if (!mapCentered && S.loc) { map.setView([S.loc.lat, S.loc.lon], 16, { animate: false }); mapCentered = true; }
+    drawUser();
+    drawPins();
+    loadMapArea();
+  }
+
+  function drawUser() {
+    if (!map) return;
+    userLayer.clearLayers();
+    if (!S.loc) return;
+    const Lf = window.L, ll = [S.loc.lat, S.loc.lon];
+    if (S.loc.accuracy && S.loc.accuracy < 2000) {
+      Lf.circle(ll, { radius: S.loc.accuracy, color: "#1a73e8", weight: 1, opacity: 0.4, fillOpacity: 0.08, interactive: false }).addTo(userLayer);
+    }
+    Lf.marker(ll, { icon: Lf.divIcon({ className: "you-dot", iconSize: [20, 20] }), keyboard: false, zIndexOffset: 1000 })
+      .bindTooltip(t().youAreHere).addTo(userLayer);
+  }
+
+  function pinClass(m) {
+    return "pin" + (m.id === S.myId ? " mine" : S.follows.includes(m.id) ? " followed" : "") + (m.status === "pending" ? " new" : "") + (m.timings && m.timings.length ? " has-times" : "");
+  }
+
+  function popupHTML(m) {
+    const L = t(), nx = C.nextJamaat(m);
+    return '<div class="pop" dir="' + (S.lang === "en" ? "ltr" : "rtl") + '"><b>' + esc(m.name) + "</b>" +
+      (m.status === "pending" ? ' <span class="tag">' + esc(L.newMasjid) + "</span>" : "") +
+      '<div class="pop-meta">' + (m.distance != null ? esc(L.km(m.distance)) + " · " : "") +
+      (nx ? esc(prayerName(nx.prayer)) + " <b class=\"pop-time\">" + esc(fmtTime(nx.minutes)) + "</b>" : esc(L.notSet)) + "</div>" +
+      '<button class="btn small primary" data-open="' + m.id + '">' + esc(L.openMasjid) + "</button></div>";
+  }
+
+  function drawPins() {
+    if (!map) return;
+    const Lf = window.L;
+    for (const m of Object.values(S.cache)) {
+      if (m.lat == null || m.status === "hidden") continue;
+      const cls = pinClass(m);
+      const have = pins[m.id];
+      if (have && have.cls === cls) { have.marker.setPopupContent(popupHTML(m)); continue; }
+      if (have) mosqueLayer.removeLayer(have.marker);
+      const marker = Lf.marker([m.lat, m.lon], {
+        icon: Lf.divIcon({ className: cls, html: "<span></span>", iconSize: [30, 36], iconAnchor: [15, 34], popupAnchor: [0, -30] }),
+        title: m.name, alt: m.name, zIndexOffset: m.id === S.myId ? 500 : 0,
+      }).bindPopup(popupHTML(m), { closeButton: false, minWidth: 180 });
+      marker.addTo(mosqueLayer);
+      pins[m.id] = { marker, cls };
+    }
+  }
+
+  async function loadMapArea() {
+    if (!map || !mapEl.isConnected || map.getZoom() < 12) return;
+    const c = map.getCenter();
+    const radius = Math.min(20000, Math.round(map.distance(c, map.getBounds().getNorthEast())));
+    try {
+      const list = await C.rpc("nearby_mosques", { p_lat: c.lat, p_lon: c.lng, p_radius_m: radius });
+      // distances from the person, not from the middle of the map
+      for (const m of list) m.distance = S.loc ? Math.round(distM(S.loc, m)) : null;
+      cacheMosques(list);
+      drawPins();
+    } catch (e) {
+      if (e.code === "network") toast(t().errors.network);
+    }
+  }
+
+  async function mapLocate() {
+    try {
+      const loc = await C.locate(false);
+      S.loc = { lat: loc.lat, lon: loc.lon, accuracy: loc.accuracy, at: Date.now() };
+      save();
+      if (map) { map.setView([loc.lat, loc.lon], Math.max(map.getZoom(), 16)); drawUser(); }
+    } catch (e) { toast(errorText(e)); }
   }
 
   function homeHTML() {
@@ -248,12 +358,17 @@
     let body;
     if (nearbyState === "loading") body = '<div class="empty"><div class="spinner"></div><p class="sub">' + esc(L.locating) + "</p></div>";
     else if (nearbyState === "error") body = '<div class="empty"><p class="sub">' + esc(nearbyError) + '</p><button class="btn primary" data-locate="1">' + esc(L.allowLocation) + "</button></div>";
-    else {
+    else if (S.nearbyView === "map" && !searchResults) {
+      body = '<div class="map-host" id="mapHost"><button class="map-me" data-maplocate="1" aria-label="' + esc(L.myLocation) + '" title="' + esc(L.myLocation) + '">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.07A7 7 0 0 0 13 5.07V3h-2v2.07A7 7 0 0 0 5.07 11H3v2h2.07A7 7 0 0 0 11 18.93V21h2v-2.07A7 7 0 0 0 18.93 13H21v-2zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg></button></div>';
+    } else {
       const list = (searchResults || S.nearby.map((id) => S.cache[id]).filter(Boolean));
       body = list.length ? '<ul class="list">' + list.map(itemHTML).join("") + "</ul>"
         : '<div class="empty"><p class="sub">' + esc(S.loc ? L.nearbyEmpty : L.locationNeeded) + '</p>' + (S.loc ? "" : '<button class="btn primary" data-locate="1">' + esc(L.findNearby) + "</button>") + "</div>";
     }
-    return '<div class="wrap"><h1>' + esc(L.tabNearby) + "</h1>" +
+    const views = '<div class="seg view-switch" role="group">' +
+      [["list", L.viewList], ["map", L.viewMap]].map(([k, n]) => '<button data-view="' + k + '" aria-pressed="' + (S.nearbyView === k && !(k === "map" && searchResults)) + '">' + esc(n) + "</button>").join("") + "</div>";
+    return '<div class="wrap"><div class="title-row"><h1>' + esc(L.tabNearby) + "</h1>" + views + "</div>" +
       '<form class="search" id="searchForm"><input id="searchInput" type="search" placeholder="' + esc(L.searchPlaceholder) + '" autocomplete="off" value="' + esc(lastQuery) + '"></form>' +
       body + '<button class="btn" data-add="1">＋ ' + esc(L.addMasjid) + "</button></div>";
   }
@@ -349,7 +464,7 @@
     toast(t().locating);
     try {
       const loc = await C.locate(true);
-      S.loc = { lat: loc.lat, lon: loc.lon, at: Date.now() };
+      S.loc = { lat: loc.lat, lon: loc.lon, accuracy: loc.accuracy, at: Date.now() };
       await fn(loc);
     } catch (e) {
       toast(errorText(e));
@@ -408,6 +523,7 @@
   }
 
   function setMine(id) {
+    if (map && map.closePopup) map.closePopup();
     S.myId = id;
     S.follows = [...new Set([...S.follows, id])];
     save();
@@ -504,6 +620,8 @@
     }
     if (d.go) { S.tab = d.go; detailId = null; save(); render(); if (d.go === "nearby" && !S.nearby.length) locateAndShow(); return; }
     if (d.locate) { locateAndShow(); return; }
+    if (d.view) { S.nearbyView = d.view; searchResults = null; lastQuery = ""; save(); render(); return; }
+    if (d.maplocate) { mapLocate(); return; }
     if (d.open) { detailId = d.open; S.tab = d.open === S.myId ? "home" : "nearby"; if (S.tab === "home") detailId = null; render(); $("view").scrollTop = 0; return; }
     if (d.back) { detailId = null; render(); return; }
     if (d.mine) { setMine(d.mine); return; }
