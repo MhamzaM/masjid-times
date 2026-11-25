@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -28,7 +29,10 @@ import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -37,7 +41,13 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
-    private static final String APP_URL = "file:///android_asset/app/index.html";
+    /*
+     * The screens are served from the APK's assets under a private https address (the same
+     * reserved host AndroidX's WebViewAssetLoader uses). A file:// page sends no Referer, and
+     * OpenStreetMap's tile servers refuse map tiles without one, so the map stayed blank.
+     */
+    private static final String ASSET_HOST = "appassets.androidplatform.net";
+    private static final String APP_URL = "https://" + ASSET_HOST + "/app/index.html";
     private static final int REQ_LOCATION = 1, REQ_NOTIF = 2;
 
     private WebView web;
@@ -74,9 +84,16 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri u = request.getUrl();
-                if (u.toString().startsWith("file:///android_asset/")) return false;
+                if (ASSET_HOST.equals(u.getHost())) return false;
                 openExternal(u);
                 return true;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri u = request.getUrl();
+                if (!"https".equals(u.getScheme()) || !ASSET_HOST.equals(u.getHost())) return null;
+                return asset(u.getPath());
             }
 
             @Override
@@ -271,6 +288,39 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------ plumbing
+
+    /** A file from assets/ for the private https address, or a 404. */
+    private WebResourceResponse asset(String path) {
+        String p = path == null ? "" : path.replaceFirst("^/+", "");
+        if (p.isEmpty() || p.contains("..")) return notFound();
+        String ext = p.substring(p.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT);
+        String mime;
+        switch (ext) {
+            case "html": mime = "text/html"; break;
+            case "js": mime = "application/javascript"; break;
+            case "css": mime = "text/css"; break;
+            case "json": mime = "application/json"; break;
+            case "svg": mime = "image/svg+xml"; break;
+            case "png": mime = "image/png"; break;
+            case "woff2": mime = "font/woff2"; break;
+            default: mime = "application/octet-stream";
+        }
+        try {
+            InputStream in = getAssets().open(p);
+            boolean text = mime.startsWith("text/") || mime.endsWith("javascript") || mime.endsWith("json") || mime.endsWith("xml");
+            WebResourceResponse r = new WebResourceResponse(mime, text ? "UTF-8" : null, in);
+            HashMap<String, String> h = new HashMap<>();
+            h.put("Cache-Control", "no-cache");
+            r.setResponseHeaders(h);
+            return r;
+        } catch (Exception e) {
+            return notFound();
+        }
+    }
+
+    private static WebResourceResponse notFound() {
+        return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", new HashMap<>(), new ByteArrayInputStream(new byte[0]));
+    }
 
     private void openExternal(Uri u) {
         String scheme = u.getScheme();

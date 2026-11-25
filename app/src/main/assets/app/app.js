@@ -219,6 +219,7 @@
   // ------------------------------------------------------------ map (Leaflet + OpenStreetMap tiles)
 
   const PESHAWAR = [34.008, 71.53];
+  let mapTileWarned = false;
   let map = null, mapEl = null, mosqueLayer = null, userLayer = null, mapTimer = 0, mapCentered = false;
   const pins = {}; // id -> { marker, cls }
 
@@ -238,6 +239,9 @@
     Lf.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).on("tileerror", () => {
+      // tell the person once per session; pins and "Open" keep working without the tiles
+      if (!mapTileWarned) { mapTileWarned = true; toast(t().mapTilesFailed); }
     }).addTo(map);
     Lf.control.zoom({ position: "bottomright" }).addTo(map);
     map.attributionControl.setPrefix(false);
