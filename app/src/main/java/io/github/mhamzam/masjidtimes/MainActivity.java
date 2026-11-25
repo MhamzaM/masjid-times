@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private boolean pageReady = false;
-    private float insetTop = 0f, insetBottom = 0f;
+    private float insetTop = 0f, insetBottom = 0f, insetKeyboard = 0f;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     /** Location requests waiting for the permission answer: {id, fresh}. */
@@ -352,21 +352,24 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     private void readInsets(WindowInsets insets) {
         float density = getResources().getDisplayMetrics().density;
-        int top, bottom;
+        int top, bottom, keyboard = 0;
         if (Build.VERSION.SDK_INT >= 30) {
             android.graphics.Insets i = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             top = i.top;
             bottom = i.bottom;
+            // Edge-to-edge windows aren't resized for the keyboard, so tell the page how tall it is.
+            keyboard = insets.getInsets(WindowInsets.Type.ime()).bottom;
         } else {
             top = insets.getSystemWindowInsetTop();
             bottom = insets.getSystemWindowInsetBottom();
         }
         insetTop = top / density;
         insetBottom = bottom / density;
+        insetKeyboard = keyboard / density;
     }
 
     private void pushInsets() {
-        if (pageReady) web.evaluateJavascript("window.setInsets && window.setInsets(" + insetTop + "," + insetBottom + ")", null);
+        if (pageReady) web.evaluateJavascript("window.setInsets && window.setInsets(" + insetTop + "," + insetBottom + "," + insetKeyboard + ")", null);
     }
 
     @Override

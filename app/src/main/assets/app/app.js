@@ -431,7 +431,7 @@
     const cur = live ? C.jamaatMinutes(live, m, today) : null;
     const hhmm = cur == null ? "" : String(Math.floor(cur / 60)).padStart(2, "0") + ":" + String(cur % 60).padStart(2, "0");
     openSheet('<h2>' + esc(L.updateTitle) + '</h2><p class="muted">' + esc(m.name) + " · " + esc(L.updateText) + "</p>" +
-      '<form id="updForm" class="wrap" data-mosque="' + m.id + '">' +
+      '<form id="updForm" class="sheet-form" data-mosque="' + m.id + '">' +
       '<div class="field"><label for="updPrayer">' + esc(L.prayer) + '</label><select id="updPrayer">' +
         C.ORDER.map((p) => '<option value="' + p + '"' + (p === pr ? " selected" : "") + ">" + esc(prayerName(p)) + "</option>").join("") + "</select></div>" +
       '<div class="field" id="mgMode"' + (pr === "maghrib" ? "" : ' hidden') + '><span class="lbl">' + esc(L.maghribMode) + '</span><div class="seg">' +
@@ -456,7 +456,7 @@
   function addSheet() {
     const L = t();
     openSheet('<h2>' + esc(L.addTitle) + '</h2><p class="muted">' + esc(L.addText) + "</p>" +
-      '<form id="addForm" class="wrap"><div class="field"><label for="addName">' + esc(L.masjidName) + '</label><input id="addName" required maxlength="120" autocomplete="off"></div>' +
+      '<form id="addForm" class="sheet-form"><div class="field"><label for="addName">' + esc(L.masjidName) + '</label><input id="addName" required maxlength="120" autocomplete="off"></div>' +
       '<button class="btn primary" type="submit">' + esc(L.add) + "</button></form>");
   }
 
@@ -706,10 +706,28 @@
     if (S.tab !== "home") { S.tab = "home"; render(); return true; }
     return false;
   };
-  window.setInsets = function (top, bottom) {
+  let nativeKeyboard = false;
+  function setKeyboard(px) {
+    const was = parseFloat(document.documentElement.style.getPropertyValue("--kb")) || 0;
+    document.documentElement.style.setProperty("--kb", Math.max(0, Math.round(px)) + "px");
+    // keep the field being typed in visible above the keyboard
+    if (px > was) setTimeout(() => {
+      const el = document.activeElement;
+      if (el && el.closest && el.closest(".sheet")) el.scrollIntoView({ block: "nearest" });
+    }, 60);
+  }
+  window.setInsets = function (top, bottom, keyboard) {
     document.documentElement.style.setProperty("--inset-top", top + "px");
     document.documentElement.style.setProperty("--inset-bottom", bottom + "px");
+    if (keyboard != null) { nativeKeyboard = true; setKeyboard(keyboard); }
   };
+  // phone browsers: the visual viewport shrinks when the keyboard opens
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const onVV = () => { if (!nativeKeyboard) setKeyboard(window.innerHeight - vv.height - vv.offsetTop); };
+    vv.addEventListener("resize", onVV);
+    vv.addEventListener("scroll", onVV);
+  }
   window.onAndroidResume = function () { refreshPerms(); refreshMine(); };
 
   // keep the countdown fresh

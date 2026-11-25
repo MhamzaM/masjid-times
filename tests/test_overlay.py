@@ -1,0 +1,43 @@
+from playwright.sync_api import sync_playwright
+exec(open("test_map.py").read().split("ok = True")[0])
+ok = True
+def check(n, c):
+    global ok; print(("PASS " if c else "FAIL ") + n); ok &= bool(c)
+with sync_playwright() as p:
+    b = p.chromium.launch(); ctx = b.new_context(viewport={"width": 412, "height": 915}, geolocation={"latitude": LAT, "longitude": LON}, permissions=["geolocation"], device_scale_factor=2.6)
+    pg = ctx.new_page()
+    pg.route("https://tile.openstreetmap.org/**", lambda r, q: r.fulfill(body=TILE, content_type="image/png"))
+    pg.route("https://fdrysyukstjeeudtfhld.supabase.co/**", handle2)
+    pg.goto(APP); pg.evaluate("window.setInsets(32, 24)")
+    pg.click("text=Find masjids near me"); pg.wait_for_selector(".m-item"); pg.click("[data-view=map]"); pg.wait_for_timeout(800)
+    pg.click("[data-add]"); pg.wait_for_timeout(400)
+    # what is on top in the middle of the sheet, over the map's zoom buttons, and over the map body?
+    sb = pg.locator(".sheet").bounding_box()
+    tops = pg.evaluate("""([x1,y1,x2,y2]) => [document.elementFromPoint(x1,y1), document.elementFromPoint(x2,y2)].map(e => !!e.closest('.sheet'))""",
+                       [sb["x"] + sb["width"] - 40, sb["y"] + 30, 60, sb["y"] + 60])
+    check("sheet above map controls", tops[0])
+    check("sheet above map", tops[1])
+    inp = pg.locator("#addName").bounding_box(); form = pg.locator("#addForm").bounding_box()
+    check("form full width (%d of %d)" % (form["width"], sb["width"]), form["width"] >= sb["width"] - 40)
+    check("input full width", inp["width"] >= sb["width"] - 40)
+    pg.screenshot(path="shot_sheet_map.png")
+    pg.click("#addName"); pg.evaluate("window.setInsets(32, 24, 300)"); pg.wait_for_timeout(300)
+    sb2 = pg.locator(".sheet").bounding_box(); inp2 = pg.locator("#addName").bounding_box(); btn = pg.locator("#addForm button").bounding_box()
+    check("sheet sits on keyboard (bottom %d, want %d)" % (sb2["y"] + sb2["height"], 915 - 300), abs(sb2["y"] + sb2["height"] - (915 - 300)) < 2)
+    check("input and button above keyboard", inp2["y"] + inp2["height"] < 615 and btn["y"] + btn["height"] < 615)
+    pg.screenshot(path="shot_sheet_kb.png")
+    pg.evaluate("window.setInsets(32, 24, 0)"); pg.wait_for_timeout(200)
+    sb3 = pg.locator(".sheet").bounding_box()
+    check("sheet back down after keyboard closes", abs(sb3["y"] + sb3["height"] - 915) < 2)
+    pg.evaluate("window.onAndroidBack()")
+    pg.evaluate("document.getElementById('toast').classList.add('show'); document.getElementById('toast').textContent='test'; document.getElementById('toast').style.pointerEvents='auto'")
+    tb = pg.locator("#toast").bounding_box()
+    check("toast above map", pg.evaluate("([x,y]) => document.elementFromPoint(x,y).id", [tb["x"] + 10, tb["y"] + 10]) == "toast")
+    # update sheet too
+    pg.evaluate("document.getElementById('toast').classList.remove('show')")
+    pg.click("[data-view=list]"); pg.click("[data-open=m1]"); pg.click(".board-actions [data-update]"); pg.wait_for_timeout(300)
+    f = pg.locator("#updForm").bounding_box(); s = pg.locator(".sheet").bounding_box()
+    check("update form full width", f["width"] >= s["width"] - 40)
+    pg.screenshot(path="shot_update_sheet.png")
+    b.close()
+print("ALL PASS" if ok else "SOME FAILED")
