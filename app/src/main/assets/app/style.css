@@ -214,3 +214,22 @@ h2 { font-size: 1.15rem; margin: 0; }
 .pop-time { font-family: var(--num); font-size: 1.15rem; color: var(--green); }
 .pop .tag { font-size: 0.75rem; font-weight: 700; color: var(--warn); background: #fff2d9; border-radius: 6px; padding: 0 6px; }
 .leaflet-container a.btn.primary, .pop .btn.primary { color: #fff; }
+
+/* ---------- one-tap confirmation on the board ---------- */
+.row[data-update] { cursor: pointer; border-radius: 8px; }
+.row[data-update]:active { background: rgba(243,241,232,0.06); }
+.row-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.chip {
+  min-height: 40px; padding: 6px 14px; border-radius: 999px; font: inherit; font-weight: 700; font-size: 0.95rem;
+  background: rgba(217,164,65,0.16); border: 1.5px solid var(--gold); color: var(--gold);
+}
+.chip.ghost { background: transparent; border-color: rgba(243,241,232,0.35); color: var(--chalk); }
+.chip.done { display: inline-flex; align-items: center; min-height: 32px; border: 0; background: rgba(243,241,232,0.08); color: rgba(243,241,232,0.75); font-weight: 400; font-size: 0.85rem; }
+.board-confirm {
+  width: 100%; min-height: 52px; margin-top: 10px; border: 0; border-radius: 12px;
+  background: var(--gold); color: #2b1d07; font: inherit; font-weight: 700; font-size: 1.05rem;
+}
+.board-hint { margin: 8px 0 4px; text-align: center; font-size: 0.82rem; color: rgba(243,241,232,0.6); }
+.stepper { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; }
+.stepper .btn { min-width: 56px; font-family: var(--num); font-size: 1.15rem; }
+.stepper input { text-align: center; }

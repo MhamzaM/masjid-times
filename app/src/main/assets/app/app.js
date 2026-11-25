@@ -144,10 +144,22 @@
       const isNext = nx && nx.prayer === p;
       const hideRow = p === "jumuah" && !d.live && !d.pending.length && !friday;
       if (hideRow) return "";
-      return '<li class="row' + (isNext ? " is-next" : "") + '">' +
+      // unverified: one tap to agree with the time you see on the masjid's board
+      let acts = "";
+      if (!d.live && d.pending.length) {
+        const chips = d.pending.map((pd) => {
+          const t12 = fmtTime(C.jamaatMinutes(pd, m, today));
+          if (pd.mine) return '<span class="chip done">' + esc(t12) + " · " + esc(L.yourReport) + "</span>";
+          if (pd.my_vote === true) return '<span class="chip done">✓ ' + esc(t12) + "</span>";
+          if (pd.my_vote === false) return '<span class="chip done">✗ ' + esc(t12) + "</span>";
+          return '<button class="chip" data-vote="' + pd.id + '" data-agree="1">✓ ' + esc(d.pending.length > 1 ? t12 + " · " + pd.agree_count : L.agree) + "</button>";
+        }).join("");
+        acts = '<span class="row-acts">' + chips + '<button class="chip ghost" data-update="' + m.id + '" data-uprayer="' + p + '">' + esc(L.differentTime) + "</button></span>";
+      }
+      return '<li class="row' + (isNext ? " is-next" : "") + '" data-update="' + m.id + '" data-uprayer="' + p + '" role="button" tabindex="0" aria-label="' + esc(L.fixTime(prayerName(p))) + '">' +
         '<span class="pn">' + esc(prayerName(p)) + (S.lang === "en" ? ' <span class="ar" lang="ur">' + prayerAr(p) + "</span>" : "") + "</span>" +
         (tm ? '<span class="tm">' + esc(tm) + "</span>" : '<span class="tm small">' + esc(L.notSet) + "</span>") +
-        (st ? '<span class="st' + (unv ? " unv" : "") + '">' + esc(st) + "</span>" : "") + "</li>";
+        (st ? '<span class="st' + (unv ? " unv" : "") + '">' + esc(st) + "</span>" : "") + acts + "</li>";
     }).join("");
 
     const dist = m.distance != null ? L.km(m.distance) : "";
@@ -158,7 +170,23 @@
     return '<section class="board" aria-label="' + esc(m.name) + '">' +
       '<div class="board-head"><div><div class="board-name">' + esc(m.name) + (m.status === "pending" ? ' <span class="tag" style="color:#f0c779">· ' + esc(L.newMasjid) + "</span>" : "") +
       '</div><div class="board-meta">' + esc(dist) + "</div></div></div>" +
-      next + '<ul class="rows">' + rows + "</ul></section>";
+      next + '<ul class="rows">' + rows + "</ul>" + confirmAllHTML(m) + "</section>";
+  }
+
+  /** What "All times match the board" would confirm: live times, plus unverified ones with a single report. */
+  function confirmPlan(m) {
+    const shown = C.displayTimings(m), plan = [];
+    for (const p of C.ORDER) {
+      const d = shown[p];
+      if (d.live) plan.push({ kind: "reconfirm", prayer: p });
+      else if (d.pending.length === 1 && !d.pending[0].mine && d.pending[0].my_vote == null) plan.push({ kind: "vote", prayer: p, id: d.pending[0].id });
+    }
+    return plan;
+  }
+
+  function confirmAllHTML(m) {
+    if (!confirmPlan(m).length) return "";
+    return '<button class="board-confirm" data-confirm-all="' + m.id + '">✓ ' + esc(t().confirmAll) + '</button><p class="board-hint">' + esc(t().tapToFix) + "</p>";
   }
 
   function pendingHTML(m) {
@@ -184,7 +212,7 @@
     if (!S.loc || m.distance == null || m.distance > 150 || Date.now() - S.loc.at > 10 * 60000) return "";
     const L = t();
     return '<div class="banner"><div>' + esc(L.atMasjid(m.name)) + '</div><div class="row2">' +
-      ((m.timings || []).length ? '<button class="btn small" data-reconfirm="' + m.id + '">' + esc(L.stillCorrect) + "</button>" : "") +
+      (confirmPlan(m).length ? '<button class="btn small" data-confirm-all="' + m.id + '">' + esc(L.stillCorrect) + "</button>" : "") +
       '<button class="btn small" data-update="' + m.id + '">' + esc(L.updateTime) + "</button>" +
       (m.status === "pending" ? '<button class="btn small" data-confirm-mosque="' + m.id + '">' + esc(L.confirmExists) + "</button>" : "") +
       "</div></div>";
@@ -427,9 +455,9 @@
     const L = t();
     const today = new Date();
     const pr = prayer || (C.nextJamaat(m) || {}).prayer || "fajr";
-    const live = (m.timings || []).find((x) => x.prayer === pr);
+    const live = currentTiming(m, pr);
     const cur = live ? C.jamaatMinutes(live, m, today) : null;
-    const hhmm = cur == null ? "" : String(Math.floor(cur / 60)).padStart(2, "0") + ":" + String(cur % 60).padStart(2, "0");
+    const hhmm = cur == null ? "" : toHHMM(cur);
     openSheet('<h2>' + esc(L.updateTitle) + '</h2><p class="muted">' + esc(m.name) + " · " + esc(L.updateText) + "</p>" +
       '<form id="updForm" class="sheet-form" data-mosque="' + m.id + '">' +
       '<div class="field"><label for="updPrayer">' + esc(L.prayer) + '</label><select id="updPrayer">' +
@@ -437,11 +465,42 @@
       '<div class="field" id="mgMode"' + (pr === "maghrib" ? "" : ' hidden') + '><span class="lbl">' + esc(L.maghribMode) + '</span><div class="seg">' +
         '<button type="button" data-mode="fixed" aria-pressed="' + !(live && live.kind === "after_sunset") + '">' + esc(L.fixedTime) + '</button>' +
         '<button type="button" data-mode="after_sunset" aria-pressed="' + !!(live && live.kind === "after_sunset") + '">' + esc(L.afterSunset) + "</button></div></div>" +
-      '<div class="field" id="fTime"><label for="updTime">' + esc(L.time) + '</label><input id="updTime" type="time" required value="' + hhmm + '"></div>' +
+      '<div class="field" id="fTime"><label for="updTime">' + esc(L.time) + '</label><div class="stepper"><button type="button" class="btn" data-step="-5" aria-label="−5">−5</button><input id="updTime" type="time" required value="' + hhmm + '"><button type="button" class="btn" data-step="5" aria-label="+5">+5</button></div></div>' +
       '<div class="field" id="fAfter" hidden><label for="updAfter">' + esc(L.minutesAfter) + '</label><input id="updAfter" type="number" inputmode="numeric" min="0" max="30" value="' + (live && live.kind === "after_sunset" ? live.minutes : 5) + '"></div>' +
       '<button class="btn primary" type="submit">' + esc(L.submit) + "</button></form>");
     syncMode();
   }
+  const toHHMM = (min) => String(Math.floor(min / 60) % 24).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0");
+
+  /** The time to start from for a prayer: the confirmed one, else the most-reported one. */
+  function currentTiming(m, prayer) {
+    const d = C.displayTimings(m)[prayer];
+    return d.live || d.pending[0] || null;
+  }
+
+  function stepTime(delta) {
+    if (!$("fAfter").hidden) {
+      const el = $("updAfter");
+      el.value = Math.min(30, Math.max(0, (parseInt(el.value, 10) || 0) + delta));
+      return;
+    }
+    const el = $("updTime");
+    let [h, mm] = (el.value || "").split(":").map(Number);
+    if (!el.value || isNaN(h) || isNaN(mm)) { const now = new Date(); h = now.getHours(); mm = Math.round(now.getMinutes() / 5) * 5; delta = 0; }
+    el.value = toHHMM(((h * 60 + mm + delta) % 1440 + 1440) % 1440);
+  }
+
+  /** Switching prayer in the form starts from that prayer's current time. */
+  function prefillPrayer() {
+    const form = $("updForm");
+    const m = form && S.cache[form.dataset.mosque];
+    if (!m) return;
+    const x = currentTiming(m, $("updPrayer").value);
+    $("updTime").value = x && x.kind !== "after_sunset" ? toHHMM(C.jamaatMinutes(x, m, new Date())) : "";
+    if (x && x.kind === "after_sunset") $("updAfter").value = x.minutes;
+    form.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.mode === "after_sunset") === !!(x && x.kind === "after_sunset"))));
+  }
+
   function syncMode() {
     const form = $("updForm");
     if (!form) return;
@@ -607,7 +666,7 @@
   }
 
   document.addEventListener("click", async (e) => {
-    const b = e.target.closest("button, [data-open]");
+    const b = e.target.closest("button, [data-open], .row[data-update]");
     if (!b) {
       if (e.target === $("sheet")) closeSheet();
       return;
@@ -634,7 +693,8 @@
       save(); syncNative(); render(); return;
     }
     if (d.dir) { directions(S.cache[d.dir]); return; }
-    if (d.update) { updateSheet(S.cache[d.update]); return; }
+    if (d.update) { updateSheet(S.cache[d.update], d.uprayer); return; }
+    if (d.step) { stepTime(+d.step); return; }
     if (d.add) { addSheet(); return; }
     if (d.mode) {
       b.parentElement.querySelectorAll("[data-mode]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -647,6 +707,21 @@
         const r = await C.rpc("vote_proposal", { p_proposal: d.vote, p_agree: agree, p_lat: loc.lat, p_lon: loc.lon, p_mock: !!loc.mock }, true);
         resultToast(r);
         if (mid) await reloadMosque(mid.id);
+      });
+      return;
+    }
+    if (d.confirmAll) {
+      const m = S.cache[d.confirmAll];
+      await withFreshLocation(async (loc) => {
+        const where = { p_lat: loc.lat, p_lon: loc.lon, p_mock: !!loc.mock };
+        let n = 0;
+        for (const step of confirmPlan(m)) {
+          if (step.kind === "reconfirm") await C.rpc("reconfirm_timing", Object.assign({ p_mosque: m.id, p_prayer: step.prayer }, where), true);
+          else await C.rpc("vote_proposal", Object.assign({ p_proposal: step.id, p_agree: true }, where), true);
+          n++;
+        }
+        toast(t().confirmAllDone(n));
+        await reloadMosque(m.id);
       });
       return;
     }
@@ -680,7 +755,11 @@
     if (d.perm) { if (native && native.requestPermission) native.requestPermission(d.perm); return; }
   });
 
-  document.addEventListener("change", (e) => { if (e.target.id === "updPrayer") syncMode(); });
+  document.addEventListener("change", (e) => { if (e.target.id === "updPrayer") { prefillPrayer(); syncMode(); } });
+  document.addEventListener("keydown", (e) => {
+    const row = e.target.closest && e.target.closest(".row[data-update]");
+    if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
+  });
   document.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (e.target.id === "updForm") await submitUpdate(e.target);
